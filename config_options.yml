@@ -1,0 +1,32 @@
+title: Pi-Tools Configurator
+eyebrow: SoloHost App
+description: Convert, compress and resize images on your own computer. Adjust the defaults below.
+footer_hint: Everything is processed on your computer. No image is sent to any external server.
+output_file: .env
+after_save: >
+  Saved. Reinstall or restart the app to apply the changes.
+fields:
+  - name: DEFAULT_FORMAT
+    label: Default output format
+    type: select
+    default: webp
+    help: The format selected when you open the app. You can change it for each conversion.
+    options:
+      - value: webp
+        label: WebP (small, recommended)
+      - value: jpeg
+        label: JPEG (works everywhere)
+      - value: png
+        label: PNG (lossless)
+      - value: avif
+        label: AVIF (smallest, slower)
+  - name: DEFAULT_QUALITY
+    label: Default quality (10-100)
+    type: number
+    default: "80"
+    help: Values between 70 and 85 usually give a good balance between size and quality. Not used for PNG.
+  - name: MAX_UPLOAD_MB
+    label: Maximum image size (MB)
+    type: number
+    default: "25"
+    help: Per-image limit, to stop a huge file from overloading your computer.

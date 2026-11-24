@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi-Tools · Images</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f6f4fb; --card:#fff; --ink:#1d1b26; --mute:#6b677a; --pri:#6b3fb8; --line:#e3deef; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#16141d; --card:#201d2b; --ink:#eeeaf8; --mute:#9d98ad; --pri:#a98af0; --line:#332f42; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:560px; margin:0 auto; padding:20px 16px 48px; }
+  h1 { font-size:1.3rem; margin:0 0 4px; }
+  p.sub { margin:0 0 18px; color:var(--mute); font-size:.9rem; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
+  label { display:block; font-size:.85rem; color:var(--mute); margin:12px 0 4px; }
+  select, input[type=number] { width:100%; padding:11px 12px; font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:10px; }
+  input[type=range] { width:100%; }
+  .row { display:flex; gap:10px; } .row > div { flex:1; }
+  .drop { display:block; text-align:center; padding:28px 12px; border:2px dashed var(--line); border-radius:12px; cursor:pointer; color:var(--mute); }
+  .drop.has { border-color:var(--pri); color:var(--ink); }
+  .drop input { display:none; }
+  .chk { display:flex; align-items:center; gap:8px; margin-top:14px; font-size:.9rem; }
+  button { width:100%; margin-top:16px; padding:14px; font:inherit; font-weight:600; color:#fff; background:var(--pri); border:0; border-radius:12px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  #msg { margin-top:12px; font-size:.9rem; min-height:1.2em; }
+  #msg.err { color:#d33; }
+  #out img { max-width:100%; border-radius:10px; display:block; margin:0 auto 10px; }
+  .stats { font-size:.9rem; color:var(--mute); text-align:center; }
+  a.dl { display:block; text-align:center; margin-top:12px; padding:13px; border:1px solid var(--pri); color:var(--pri); border-radius:12px; text-decoration:none; font-weight:600; }
+  footer { text-align:center; font-size:.78rem; color:var(--mute); margin-top:18px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pi-Tools · Images</h1>
+  <p class="sub">Convert, compress and resize on your own computer. Nothing leaves your device.</p>
+
+  <form id="f" class="card">
+    <label class="drop" id="drop">
+      <span id="dropText">Tap to choose an image<br><small>JPG, PNG, WebP, AVIF, GIF, TIFF or HEIC (iPhone)</small></span>
+      <input type="file" id="file" accept="image/*,.heic,.heif">
+    </label>
+
+    <label for="format">Output format</label>
+    <select id="format"></select>
+
+    <label for="quality">Quality: <b id="qv"></b></label>
+    <input type="range" id="quality" min="10" max="100" step="1">
+
+    <div class="row">
+      <div><label for="w">Max width (px)</label><input type="number" id="w" inputmode="numeric" min="1" max="20000"></div>
+      <div><label for="h">Max height (px)</label><input type="number" id="h" inputmode="numeric" min="1" max="20000"></div>
+    </div>
+
+    <label class="chk"><input type="checkbox" id="meta"> Keep metadata (GPS location, camera info…)</label>
+
+    <button id="go" type="submit" disabled>Convert</button>
+    <div id="msg"></div>
+  </form>
+
+  <div id="out" class="card" hidden>
+    <img id="prev" alt="Result">
+    <div class="stats" id="stats"></div>
+    <a class="dl" id="dl" href="#">Download</a>
+  </div>
+
+  <footer>Metadata (including GPS location) is removed by default.</footer>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let cfg = { maxUploadMb: 25, defaultFormat: "webp", defaultQuality: 80, formats: ["webp","jpeg","png","avif"] };
+let objectUrl = null;
+
+fetch("api/config").then(r => r.json()).then(c => {
+  cfg = c;
+  $("format").innerHTML = c.formats.map(f => `<option value="${f}">${f.toUpperCase()}</option>`).join("");
+  $("format").value = c.defaultFormat;
+  $("quality").value = c.defaultQuality;
+  $("qv").textContent = c.defaultQuality;
+}).catch(() => {});
+
+$("quality").addEventListener("input", e => $("qv").textContent = e.target.value);
+$("format").addEventListener("change", () => { $("quality").disabled = $("format").value === "png"; });
+
+$("file").addEventListener("change", () => {
+  const f = $("file").files[0];
+  $("go").disabled = !f;
+  $("drop").classList.toggle("has", !!f);
+  $("dropText").textContent = f ? `${f.name} · ${fmt(f.size)}` : "Tap to choose an image";
+  $("out").hidden = true;
+  setMsg("");
+});
+
+function fmt(n) { return n > 1048576 ? (n/1048576).toFixed(2) + " MB" : Math.max(1, Math.round(n/1024)) + " KB"; }
+function setMsg(t, err) { $("msg").textContent = t; $("msg").className = err ? "err" : ""; }
+
+$("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = $("file").files[0];
+  if (!f) return;
+  if (f.size > cfg.maxUploadMb * 1048576) return setMsg(`Maximum ${cfg.maxUploadMb} MB per image.`, true);
+
+  const fd = new FormData();
+  fd.append("image", f);
+  fd.append("format", $("format").value);
+  fd.append("quality", $("quality").value);
+  fd.append("width", $("w").value);
+  fd.append("height", $("h").value);
+  fd.append("keepMetadata", $("meta").checked ? "true" : "false");
+
+  $("go").disabled = true; setMsg("Processing…");
+  try {
+    const r = await fetch("api/convert", { method: "POST", body: fd });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || "Conversion failed."); }
+    const blob = await r.blob();
+    const orig = Number(r.headers.get("X-Original-Bytes")), out = Number(r.headers.get("X-Output-Bytes"));
+    const dims = `${r.headers.get("X-Output-Width")}×${r.headers.get("X-Output-Height")}`;
+    const name = decodeURIComponent((r.headers.get("Content-Disposition") || "").split("filename*=UTF-8''")[1] || "imagen");
+
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(blob);
+    $("prev").src = objectUrl;
+    $("dl").href = objectUrl; $("dl").download = name;
+    const pct = orig ? Math.round((1 - out/orig) * 100) : 0;
+    $("stats").textContent = `${fmt(orig)} → ${fmt(out)} (${pct >= 0 ? "-" : "+"}${Math.abs(pct)}%) · ${dims}`;
+    $("out").hidden = false; setMsg("");
+    $("out").scrollIntoView({ behavior: "smooth" });
+  } catch (err) {
+    setMsg(err.message, true);
+  } finally {
+    $("go").disabled = false;
+  }
+});
+</script>
+</body>
+</html>
