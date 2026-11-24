@@ -2,7 +2,7 @@ services:
   web:
     # Public image published to GHCR by .github/workflows/publish.yml.
     # Replace YOUR_GITHUB_USERNAME (lowercase) and always pin a version tag, never :latest.
-    image: ghcr.io/YOUR_GITHUB_USERNAME/pi-tools:0.1.0
+    image: ghcr.io/cross555/pi-tools:0.1.0
     restart: unless-stopped
     labels:
       pi.ui.primary: "true"
